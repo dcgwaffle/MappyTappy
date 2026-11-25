@@ -32,6 +32,7 @@ Final score: 891
 <img width="457" height="240" alt="image" src="https://github.com/user-attachments/assets/1a61ea05-b68a-4985-9eb5-2474d35a070a" />
 
 | `/record` | Best total score of all time, with the level breakdown |
+
 <img width="333" height="218" alt="image" src="https://github.com/user-attachments/assets/7670edd2-fa26-4b24-94bc-1e7b9f17c5d7" />
 
 
