@@ -156,6 +156,72 @@ async def leaderboard(interaction: discord.Interaction, last_week: bool = False)
     await interaction.response.send_message(embed=build_leaderboard(start, end))
 
 
+def build_stats(start, end, label: str) -> discord.Embed:
+    """Best score at each level (1-5) in the given date range. start=None means all time."""
+    with db() as conn:
+        if start is None:
+            rows = conn.execute("SELECT user_id, game_date, rounds FROM scores").fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT user_id, game_date, rounds FROM scores WHERE game_date BETWEEN ? AND ?",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
+
+    best = {lvl: (-1, []) for lvl in range(5)}  # level -> (top score, [(user_id, date), ...])
+    for user_id, game_date, rounds_str in rows:
+        try:
+            rounds = [int(x) for x in (rounds_str or "").split(",")]
+        except ValueError:
+            continue
+        if len(rounds) != 5:
+            continue
+        for lvl, score in enumerate(rounds):
+            top, holders = best[lvl]
+            if score > top:
+                best[lvl] = (score, [(user_id, game_date)])
+            elif score == top:
+                holders.append((user_id, game_date))
+
+    embed = discord.Embed(
+        title=f"📊 Map Tap Best Scores by Level ({label})",
+        color=discord.Color.green(),
+    )
+    lines = []
+    for lvl in range(5):
+        top, holders = best[lvl]
+        if top < 0:
+            continue
+        shown = ", ".join(
+            f"<@{uid}> ({dt.date.fromisoformat(d):%b %d})" for uid, d in holders[:3]
+        )
+        extra = f" +{len(holders) - 3} more" if len(holders) > 3 else ""
+        lines.append(f"**Level {lvl + 1}:** {top}: {shown}{extra}")
+
+    embed.description = "\n".join(lines) if lines else "No level scores logged yet."
+    return embed
+
+
+@bot.tree.command(name="stats", description="Show who has the best score at each level")
+@app_commands.describe(period="Time range (default: all time)")
+@app_commands.choices(
+    period=[
+        app_commands.Choice(name="All time", value="all"),
+        app_commands.Choice(name="This week", value="week"),
+        app_commands.Choice(name="Last week", value="last"),
+    ]
+)
+async def stats(interaction: discord.Interaction, period: app_commands.Choice[str] = None):
+    value = period.value if period else "all"
+    today = dt.datetime.now(TZ).date()
+    if value == "all":
+        embed = build_stats(None, None, "All time")
+    else:
+        start, end = week_bounds(today, 1 if value == "last" else 0)
+        label = "Last week" if value == "last" else "This week"
+        embed = build_stats(start, end, label)
+    await interaction.response.send_message(embed=embed)
+
+
 # Posts every Sunday at 8:00 PM in the configured timezone
 @tasks.loop(time=dt.time(hour=20, minute=0, tzinfo=TZ))
 async def weekly_post():
