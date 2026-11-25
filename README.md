@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/35434508/README.md)
 # MappyTappy
 
 A Discord bot that tracks a friend group's daily [Map Tap](https://maptap.gg) scores. Paste your share text in a channel and the bot logs it, then builds weekly leaderboards, per-level win counts, and an all-time record.
