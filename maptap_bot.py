@@ -156,8 +156,12 @@ async def leaderboard(interaction: discord.Interaction, last_week: bool = False)
     await interaction.response.send_message(embed=build_leaderboard(start, end))
 
 
+LEVEL_NAMES = ["Beginner", "Easy", "Medium", "Hard", "Extreme"]
+
+
 def build_stats(start, end, label: str) -> discord.Embed:
-    """Best score at each level (1-5) in the given date range. start=None means all time."""
+    """For each level, count how many days each player had the top score among
+    everyone who posted that day. start=None means all time."""
     with db() as conn:
         if start is None:
             rows = conn.execute("SELECT user_id, game_date, rounds FROM scores").fetchall()
@@ -167,7 +171,8 @@ def build_stats(start, end, label: str) -> discord.Embed:
                 (start.isoformat(), end.isoformat()),
             ).fetchall()
 
-    best = {lvl: (-1, []) for lvl in range(5)}  # level -> (top score, [(user_id, date), ...])
+    # Group valid entries by day
+    by_day = {}
     for user_id, game_date, rounds_str in rows:
         try:
             rounds = [int(x) for x in (rounds_str or "").split(",")]
@@ -175,33 +180,40 @@ def build_stats(start, end, label: str) -> discord.Embed:
             continue
         if len(rounds) != 5:
             continue
-        for lvl, score in enumerate(rounds):
-            top, holders = best[lvl]
-            if score > top:
-                best[lvl] = (score, [(user_id, game_date)])
-            elif score == top:
-                holders.append((user_id, game_date))
+        by_day.setdefault(game_date, []).append((user_id, rounds))
+
+    # wins[level][user_id] = number of days that user had the top score
+    wins = [dict() for _ in range(5)]
+    for entries in by_day.values():
+        if len(entries) < 2:  # need at least 2 players to compare
+            continue
+        for lvl in range(5):
+            top = max(r[lvl] for _, r in entries)
+            for user_id, r in entries:
+                if r[lvl] == top:  # ties: everyone tied gets the win
+                    wins[lvl][user_id] = wins[lvl].get(user_id, 0) + 1
 
     embed = discord.Embed(
-        title=f"📊 Map Tap Best Scores by Level ({label})",
+        title=f"📊 Map Tap Level Wins ({label})",
         color=discord.Color.green(),
     )
     lines = []
     for lvl in range(5):
-        top, holders = best[lvl]
-        if top < 0:
+        if not wins[lvl]:
             continue
-        shown = ", ".join(
-            f"<@{uid}> ({dt.date.fromisoformat(d):%b %d})" for uid, d in holders[:3]
-        )
-        extra = f" +{len(holders) - 3} more" if len(holders) > 3 else ""
-        lines.append(f"**Level {lvl + 1}:** {top}: {shown}{extra}")
+        top_count = max(wins[lvl].values())
+        leaders = [uid for uid, c in wins[lvl].items() if c == top_count]
+        names = ", ".join(f"<@{uid}>" for uid in leaders)
+        lines.append(f"**Level {lvl + 1} ({LEVEL_NAMES[lvl]}):** {top_count} - {names}")
 
-    embed.description = "\n".join(lines) if lines else "No level scores logged yet."
+    embed.description = (
+        "\n".join(lines) if lines else "No days with 2+ players logged yet."
+    )
+    embed.set_footer(text="Counts days a player had the top score at that level among everyone who posted that day.")
     return embed
 
 
-@bot.tree.command(name="stats", description="Show who has the best score at each level")
+@bot.tree.command(name="stats", description="Show who wins each level most often")
 @app_commands.describe(period="Time range (default: all time)")
 @app_commands.choices(
     period=[
@@ -220,6 +232,51 @@ async def stats(interaction: discord.Interaction, period: app_commands.Choice[st
         label = "Last week" if value == "last" else "This week"
         embed = build_stats(start, end, label)
     await interaction.response.send_message(embed=embed)
+
+
+def build_record() -> discord.Embed:
+    """All-time best total score, with who got it, when, and the score at each level."""
+    with db() as conn:
+        top_row = conn.execute("SELECT MAX(final_score) FROM scores").fetchone()
+        top = top_row[0] if top_row else None
+        rows = (
+            conn.execute(
+                "SELECT user_id, game_date, rounds FROM scores "
+                "WHERE final_score = ? ORDER BY game_date",
+                (top,),
+            ).fetchall()
+            if top is not None
+            else []
+        )
+
+    embed = discord.Embed(title="🏆 All-Time Best Score", color=discord.Color.gold())
+    if not rows:
+        embed.description = "No scores logged yet."
+        return embed
+
+    blocks = []
+    for user_id, game_date, rounds_str in rows:
+        date_text = f"{dt.date.fromisoformat(game_date):%b %d, %Y}"
+        header = f"**{top}** - <@{user_id}> on {date_text}"
+        try:
+            rounds = [int(x) for x in (rounds_str or "").split(",")]
+        except ValueError:
+            rounds = []
+        if len(rounds) == 5:
+            levels = "\n".join(
+                f"Level {i + 1} ({LEVEL_NAMES[i]}): {score}" for i, score in enumerate(rounds)
+            )
+            blocks.append(f"{header}\n{levels}")
+        else:
+            blocks.append(header)
+
+    embed.description = "\n\n".join(blocks)
+    return embed
+
+
+@bot.tree.command(name="record", description="Show the best score of all time")
+async def record(interaction: discord.Interaction):
+    await interaction.response.send_message(embed=build_record())
 
 
 # Posts every Sunday at 8:00 PM in the configured timezone
