@@ -26,13 +26,11 @@ Final score: 891
 | Command | What it shows |
 |---|---|
 | `/leaderboard [last_week]` | Total points for the week, days played, and average |
-<img width="447" height="204" alt="image" src="https://github.com/user-attachments/assets/7a04fb31-6142-4a60-aa3d-0c2920219958" />
-
 | `/stats [period]` | Who wins each level most often (All time, This week, Last week) |
-<img width="457" height="240" alt="image" src="https://github.com/user-attachments/assets/4b4abb9f-150a-4d33-a953-a1e89053378c" />
-
 | `/record` | Best total score of all time, with the level breakdown |
 
+<img width="447" height="204" alt="image" src="https://github.com/user-attachments/assets/f58bb28c-c5db-4b53-b6c9-a6f27e8629c7" />
+<img width="457" height="240" alt="image" src="https://github.com/user-attachments/assets/075ab07b-4bf0-4e38-b18a-b74cae20e587" />
 <img width="333" height="218" alt="image" src="https://github.com/user-attachments/assets/b9a83294-920b-405c-8236-66500d4ff1f3" />
 
 
